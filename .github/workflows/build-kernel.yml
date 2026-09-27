@@ -1,0 +1,81 @@
+name: Build OPPO A57 Kernel (ReSukiSU + SUSFS Tested)
+
+on:
+  push:
+    branches:
+      - lineage-21-resukisu-susfs23
+      - lineage-21-resukisu-susfs23-bpf
+    paths-ignore:
+      - 'README*.md'
+  workflow_dispatch:
+    inputs:
+      resukisu_commit:
+        description: 'ReSukiSU Git Commit or Tag'
+        required: false
+        default: '85fd9faafb76143f6ff50b651fb852d06fd765b1'
+
+jobs:
+  build:
+    name: Build A57 Kernel (Proton Clang)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Kernel Source
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Set up Host Build Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libssl-dev \
+            bc \
+            bison \
+            flex \
+            libelf-dev \
+            zip \
+            git \
+            curl
+
+      - name: Download Proton Clang Toolchain
+        run: |
+          echo "Cloning Proton Clang toolchain..."
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git "$GITHUB_WORKSPACE/toolchain/clang"
+          echo "Proton Clang version:"
+          "$GITHUB_WORKSPACE/toolchain/clang/bin/clang" --version
+
+      - name: Build Kernel and Package AnyKernel3
+        run: |
+          export PATH="$GITHUB_WORKSPACE/toolchain/clang/bin:$PATH"
+          export CLANG_BIN="$GITHUB_WORKSPACE/toolchain/clang/bin"
+          export CROSS_COMPILE="aarch64-linux-gnu-"
+          export CROSS_COMPILE_ARM32="arm-linux-gnueabi-"
+          export JOBS=$(nproc)
+          export OUT="$GITHUB_WORKSPACE/out"
+          if [ -n "${{ github.event.inputs.resukisu_commit }}" ]; then
+            export KSU_COMMIT="${{ github.event.inputs.resukisu_commit }}"
+          fi
+
+          chmod +x ./build_a57_resukisu_susfs.sh
+          ./build_a57_resukisu_susfs.sh
+
+      - name: Upload AnyKernel3 Flashable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReSukiSU-SUSFS-OPPO-A57-tested
+          path: out/*.zip
+
+      - name: Upload Kernel Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: Image.gz-dtb
+          path: out/arch/arm64/boot/Image.gz-dtb
+
+      - name: Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: out/build.log

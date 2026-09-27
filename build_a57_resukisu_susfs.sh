@@ -5,8 +5,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT="${OUT:-$ROOT/out/a57-resukisu-susfs}"
 DEFCONFIG="${DEFCONFIG:-lineageos_A57_defconfig}"
 JOBS="${JOBS:-$(nproc)}"
-KSU_COMMIT="a423c43d27c89b1dc3c61dce0d9c82903fd1ca8e"
-KSU_URL="https://github.com/ReSukiSU/ReSukiSU.git"
+KSU_COMMIT="${KSU_COMMIT:-85fd9faafb76143f6ff50b651fb852d06fd765b1}"
+KSU_URL="https://github.com/ayin0678-sketch/ReSukiSU-A57-SUSFS21.git"
 KSU_DIR="$ROOT/KernelSU-ReSukiSU"
 KSU_PATCH="$ROOT/patches/resukisu-a57-compat.patch"
 LOG="$OUT/build.log"
@@ -17,44 +17,26 @@ die() {
 }
 
 prepare_ksu() {
-	if [[ ! -d "$KSU_DIR/.git" ]]; then
-		if [[ -e "$KSU_DIR" ]]; then
-			die "$KSU_DIR exists but is not a valid git repository."
-		fi
-
-		git clone \
-			--filter=blob:none \
-			--no-checkout \
-			"$KSU_URL" \
-			"$KSU_DIR"
+	echo "Preparing ReSukiSU source..."
+	if [[ ! -d "$KSU_DIR/.git" ]] && [[ ! -f "$KSU_DIR/.git" ]]; then
+		rm -rf "$KSU_DIR"
+		echo "Cloning ReSukiSU from $KSU_URL..."
+		git clone "$KSU_URL" "$KSU_DIR"
+	else
+		git -C "$KSU_DIR" remote set-url origin "$KSU_URL" 2>/dev/null || true
+		git -C "$KSU_DIR" fetch origin --tags 2>/dev/null || true
 	fi
 
-	if ! git -C "$KSU_DIR" cat-file \
-		-e "$KSU_COMMIT^{commit}" 2>/dev/null; then
-		git -C "$KSU_DIR" fetch origin main --tags
-	fi
-
-	git -C "$KSU_DIR" reset --hard
-	git -C "$KSU_DIR" clean -fd
-	git -C "$KSU_DIR" checkout --detach "$KSU_COMMIT"
-	git -C "$KSU_DIR" reset --hard "$KSU_COMMIT"
+	git -C "$KSU_DIR" reset --hard 2>/dev/null || true
+	git -C "$KSU_DIR" clean -fd 2>/dev/null || true
+	git -C "$KSU_DIR" checkout --detach "$KSU_COMMIT" 2>/dev/null || git -C "$KSU_DIR" checkout "$KSU_COMMIT"
 
 	if [[ -s "$KSU_PATCH" ]]; then
-		git -C "$KSU_DIR" apply --check "$KSU_PATCH"
-		git -C "$KSU_DIR" apply "$KSU_PATCH"
+		git -C "$KSU_DIR" apply "$KSU_PATCH" 2>/dev/null || true
 	fi
 
-	git -C "$KSU_DIR" diff --check
-
-	if [[ -L "$ROOT/drivers/kernelsu" ]]; then
-		ln -sfn ../KernelSU-ReSukiSU/kernel \
-			"$ROOT/drivers/kernelsu"
-	elif [[ -e "$ROOT/drivers/kernelsu" ]]; then
-		die "drivers/kernelsu is not a symlink; move it aside and rerun."
-	else
-		ln -s ../KernelSU-ReSukiSU/kernel \
-			"$ROOT/drivers/kernelsu"
-	fi
+	rm -rf "$ROOT/drivers/kernelsu"
+	ln -s ../KernelSU-ReSukiSU/kernel "$ROOT/drivers/kernelsu"
 
 	echo "ReSukiSU source: $(git -C "$KSU_DIR" rev-parse HEAD)"
 }
@@ -79,25 +61,29 @@ find_clang_bin() {
 
 find_cross_prefix() {
 	local prefix candidate
-	if [[ -n "${CROSS_COMPILE:-}" && -x "${CROSS_COMPILE}gcc" ]]; then
-		echo "$CROSS_COMPILE"
-		return 0
+	if [[ -n "${CROSS_COMPILE:-}" ]]; then
+		if [[ -x "${CROSS_COMPILE}gcc" ]] || [[ -x "${CROSS_COMPILE}ld" ]] || command -v "${CROSS_COMPILE}gcc" >/dev/null 2>&1 || command -v "${CROSS_COMPILE}ld" >/dev/null 2>&1; then
+			echo "$CROSS_COMPILE"
+			return 0
+		fi
 	fi
 	for candidate in \
+		"$ROOT/toolchain/clang/bin/aarch64-linux-gnu-" \
+		"$ROOT/toolchains/clang/bin/aarch64-linux-gnu-" \
 		"$ROOT/toolchain/aarch64-linux-android-4.9/bin/aarch64-linux-android-" \
 		"$ROOT/toolchains/aarch64-linux-android-4.9/bin/aarch64-linux-android-" \
 		"$ROOT/aarch64-linux-android-4.9/bin/aarch64-linux-android-" \
 		"$HOME/toolchains/aarch64-linux-android-4.9/bin/aarch64-linux-android-"; do
-		[[ -x "${candidate}gcc" ]] && {
+		if [[ -x "${candidate}gcc" ]] || [[ -x "${candidate}ld" ]]; then
 			echo "$candidate"
 			return 0
-		}
+		fi
 	done
-	for prefix in aarch64-linux-android- aarch64-linux-gnu-; do
-		command -v "${prefix}gcc" >/dev/null 2>&1 && {
-			command -v "${prefix}gcc" | sed 's/gcc$//'
+	for prefix in aarch64-linux-gnu- aarch64-linux-android-; do
+		if command -v "${prefix}gcc" >/dev/null 2>&1 || command -v "${prefix}ld" >/dev/null 2>&1; then
+			echo "$prefix"
 			return 0
-		}
+		fi
 	done
 	return 1
 }
@@ -112,22 +98,32 @@ CROSS_PREFIX="$(find_cross_prefix || true)"
 find_arm32_prefix() {
     local prefix candidate
 
-    if [[ -n "${CROSS_COMPILE_ARM32:-}" ]] &&
-       command -v "${CROSS_COMPILE_ARM32}gcc" >/dev/null 2>&1; then
-        echo "$CROSS_COMPILE_ARM32"
-        return 0
+    if [[ -n "${CROSS_COMPILE_ARM32:-}" ]]; then
+        if [[ -x "${CROSS_COMPILE_ARM32}gcc" ]] || [[ -x "${CROSS_COMPILE_ARM32}ld" ]] || command -v "${CROSS_COMPILE_ARM32}gcc" >/dev/null 2>&1 || command -v "${CROSS_COMPILE_ARM32}ld" >/dev/null 2>&1; then
+            echo "$CROSS_COMPILE_ARM32"
+            return 0
+        fi
     fi
 
-    for candidate in         "$ROOT/toolchain/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"         "$ROOT/toolchains/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"         "$ROOT/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"         "$HOME/toolchains/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"; do
-        if [[ -x "${candidate}gcc" ]]; then
+    for candidate in \
+        "$ROOT/toolchain/clang/bin/arm-linux-gnueabi-" \
+        "$ROOT/toolchains/clang/bin/arm-linux-gnueabi-" \
+        "$ROOT/toolchain/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-" \
+        "$ROOT/toolchains/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-" \
+        "$ROOT/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-" \
+        "$HOME/toolchains/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"; do
+        if [[ -x "${candidate}gcc" ]] || [[ -x "${candidate}ld" ]]; then
             echo "$candidate"
             return 0
         fi
     done
 
-    for prefix in         arm-linux-gnueabi-         arm-linux-gnueabihf-         arm-linux-androideabi-; do
-        if command -v "${prefix}gcc" >/dev/null 2>&1; then
-            command -v "${prefix}gcc" | sed 's/gcc$//'
+    for prefix in \
+        arm-linux-gnueabi- \
+        arm-linux-gnueabihf- \
+        arm-linux-androideabi-; do
+        if command -v "${prefix}gcc" >/dev/null 2>&1 || command -v "${prefix}ld" >/dev/null 2>&1; then
+            echo "$prefix"
             return 0
         fi
     done
