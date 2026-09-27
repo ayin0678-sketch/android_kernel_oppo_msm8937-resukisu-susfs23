@@ -64,7 +64,7 @@ jobs:
       - name: Upload AnyKernel3 Flashable ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: ReSukiSU-SUSFS-OPPO-A57-tested
+          name: ReSukiSU-SUSFS-BPF54-OPPO-A57
           path: out/*.zip
 
       - name: Upload Kernel Image
