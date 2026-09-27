@@ -1871,11 +1871,18 @@ void *__vmalloc(unsigned long size, gfp_t gfp_mask, pgprot_t prot)
 }
 EXPORT_SYMBOL(__vmalloc);
 
+void *__vmalloc_node_flags_caller(unsigned long size, int node, gfp_t flags,
+				  void *caller)
+{
+	return __vmalloc_node(size, 1, flags, PAGE_KERNEL, node, caller);
+}
+EXPORT_SYMBOL(__vmalloc_node_flags_caller);
+
 static inline void *__vmalloc_node_flags(unsigned long size,
 					int node, gfp_t flags)
 {
-	return __vmalloc_node(size, 1, flags, PAGE_KERNEL,
-					node, __builtin_return_address(0));
+	return __vmalloc_node_flags_caller(size, node, flags,
+					   __builtin_return_address(0));
 }
 
 /**
@@ -1934,6 +1941,27 @@ void *vmalloc_user(unsigned long size)
 	return ret;
 }
 EXPORT_SYMBOL(vmalloc_user);
+
+/**
+ * vmalloc_user_node_flags - allocate zeroed virtually contiguous memory on a node
+ * @size: allocation size
+ * @node: numa node
+ * @flags: flags for the page level allocator
+ */
+void *vmalloc_user_node_flags(unsigned long size, int node, gfp_t flags)
+{
+	struct vm_struct *area;
+	void *ret;
+
+	ret = __vmalloc_node(size, SHMLBA, flags | __GFP_ZERO,
+			     PAGE_KERNEL, node, __builtin_return_address(0));
+	if (ret) {
+		area = find_vm_area(ret);
+		area->flags |= VM_USERMAP;
+	}
+	return ret;
+}
+EXPORT_SYMBOL(vmalloc_user_node_flags);
 
 /**
  *	vmalloc_node  -  allocate memory on a specific node
