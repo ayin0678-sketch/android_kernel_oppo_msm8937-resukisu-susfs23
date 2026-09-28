@@ -12,7 +12,7 @@ on:
       resukisu_commit:
         description: 'ReSukiSU Git Commit or Tag'
         required: false
-        default: '85fd9faafb76143f6ff50b651fb852d06fd765b1'
+        default: 'main'
 
 jobs:
   build:
