@@ -4,10 +4,10 @@
 ### AnyKernel setup
 # global properties
 properties() { '
-kernel.string=ReSukiSU + SUSFS v2.3.0 + BPF 5.4 for OPPO A57 (LineageOS 21, kernel 4.9.337)
+kernel.string=ReSukiSU + SUSFS v2.3.0 + BPF 5.4 for OPPO A57
 do.devicecheck=0
 do.modules=0
-do.systemless=1
+do.systemless=0
 do.cleanup=1
 do.cleanuponabort=0
 device.name1=A57
@@ -20,26 +20,23 @@ supported.patchlevels=
 supported.vendorpatchlevels=
 '; } # end properties
 
-
 ### AnyKernel install
 ## boot files attributes
 boot_attributes() {
-set_perm_recursive 0 0 755 644 $RAMDISK/*;
-set_perm_recursive 0 0 750 750 $RAMDISK/init* $RAMDISK/sbin;
+set_perm_recursive 0 0 755 644 $ramdisk/*;
+set_perm_recursive 0 0 750 750 $ramdisk/init* $ramdisk/sbin;
 } # end attributes
 
 # boot shell variables
-BLOCK=auto;
-IS_SLOT_DEVICE=0;
-RAMDISK_COMPRESSION=auto;
-PATCH_VBMETA_FLAG=auto;
-NO_MAGISK_CHECK=1;
+block=/dev/block/bootdevice/by-name/boot;
+is_slot_device=0;
+ramdisk_compression=auto;
+patch_vbmeta_flag=auto;
 
 # import functions/variables and setup patching - see for reference (DO NOT REMOVE)
 . tools/ak3-core.sh;
 
 # boot install
-split_boot;
-
-flash_boot;
+dump_boot;
+write_boot;
 ## end boot install
