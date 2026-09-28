@@ -168,9 +168,10 @@ make -C "$ROOT" "${MAKE_ARGS[@]}" olddefconfig
 IMAGE="$OUT/arch/arm64/boot/Image.gz-dtb"
 [[ -s "$IMAGE" ]] || die "build finished without Image.gz-dtb"
 
+rm -f "$ROOT/AnyKernel3/Image" "$ROOT/AnyKernel3/Image.gz" "$ROOT/AnyKernel3/Image.gz-dtb"
 cp -f "$IMAGE" "$ROOT/AnyKernel3/Image.gz-dtb"
 if command -v zip >/dev/null 2>&1; then
-	PACKAGE="$OUT/ReSukiSU-SUSFS-v2.1.0-BPF-OPPO-A57.zip"
+	PACKAGE="$OUT/ReSukiSU-SUSFS-v2.3.0-BPF-OPPO-A57.zip"
 	(
 		cd "$ROOT/AnyKernel3"
 		zip -qr9 "$PACKAGE" . -x '.git/*' 'README.md'

@@ -4,8 +4,8 @@
 ### AnyKernel setup
 # global properties
 properties() { '
-kernel.string=ReSukiSU + SUSFS v2.1.0 + BPF 5.4 for OPPO A57 (LineageOS 21, kernel 4.9.337)
-do.devicecheck=1
+kernel.string=ReSukiSU + SUSFS v2.3.0 + BPF 5.4 for OPPO A57 (LineageOS 21, kernel 4.9.337)
+do.devicecheck=0
 do.modules=0
 do.systemless=1
 do.cleanup=1

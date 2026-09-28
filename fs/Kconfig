@@ -118,22 +118,22 @@ endmenu
 config KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT
 	bool
 	depends on KSU_SUSFS && KSU_SUSFS_SUS_MOUNT
-	default y
+	default n
 
 config KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT
 	bool
 	depends on KSU_SUSFS && KSU_SUSFS_SUS_MOUNT
-	default y
+	default n
 
 config KSU_SUSFS_TRY_UMOUNT
 	bool
 	depends on KSU_SUSFS
-	default y
+	default n
 
 config KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT
 	bool
 	depends on KSU_SUSFS_TRY_UMOUNT
-	default y
+	default n
 
 if BLOCK
 menu "CD-ROM/DVD Filesystems"
