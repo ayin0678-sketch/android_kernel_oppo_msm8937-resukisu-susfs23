@@ -7,7 +7,7 @@ properties() { '
 kernel.string=ReSukiSU + SUSFS v2.3.0 + BPF 5.4 for OPPO A57
 do.devicecheck=0
 do.modules=0
-do.systemless=0
+do.systemless=1
 do.cleanup=1
 do.cleanuponabort=0
 device.name1=A57
@@ -23,20 +23,27 @@ supported.vendorpatchlevels=
 ### AnyKernel install
 ## boot files attributes
 boot_attributes() {
-set_perm_recursive 0 0 755 644 $ramdisk/*;
-set_perm_recursive 0 0 750 750 $ramdisk/init* $ramdisk/sbin;
+set_perm_recursive 0 0 755 644 $RAMDISK/*;
+set_perm_recursive 0 0 750 750 $RAMDISK/init* $RAMDISK/sbin;
 } # end attributes
 
 # boot shell variables
-block=/dev/block/bootdevice/by-name/boot;
+block=auto;
+BLOCK=auto;
 is_slot_device=0;
+IS_SLOT_DEVICE=0;
 ramdisk_compression=auto;
+RAMDISK_COMPRESSION=auto;
 patch_vbmeta_flag=auto;
+PATCH_VBMETA_FLAG=auto;
+no_magisk_check=1;
+NO_MAGISK_CHECK=1;
 
 # import functions/variables and setup patching - see for reference (DO NOT REMOVE)
 . tools/ak3-core.sh;
 
 # boot install
-dump_boot;
-write_boot;
+split_boot;
+
+flash_boot;
 ## end boot install
