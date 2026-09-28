@@ -933,6 +933,7 @@ setup_ak() {
   fi;
 
   # target block partition detection enabled by BLOCK=<partition filename> or auto (from anykernel.sh)
+  [ -z "$BLOCK" ] && BLOCK="${block:-auto}";
   case $BLOCK in
     /dev/*)
       if [ "$SLOT" ] && [ -e "$BLOCK$SLOT" ]; then
