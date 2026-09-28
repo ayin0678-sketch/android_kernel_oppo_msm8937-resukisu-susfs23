@@ -5,8 +5,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT="${OUT:-$ROOT/out/a57-resukisu-susfs}"
 DEFCONFIG="${DEFCONFIG:-lineageos_A57_defconfig}"
 JOBS="${JOBS:-$(nproc)}"
-KSU_COMMIT="${KSU_COMMIT:-85fd9faafb76143f6ff50b651fb852d06fd765b1}"
-KSU_URL="https://github.com/ayin0678-sketch/ReSukiSU-A57-SUSFS21.git"
+KSU_COMMIT="${KSU_COMMIT:-main}"
+KSU_URL="${KSU_URL:-https://github.com/ReSukiSU/ReSukiSU.git}"
 KSU_DIR="$ROOT/KernelSU-ReSukiSU"
 KSU_PATCH="$ROOT/patches/resukisu-a57-compat.patch"
 LOG="$OUT/build.log"
@@ -29,7 +29,7 @@ prepare_ksu() {
 
 	git -C "$KSU_DIR" reset --hard 2>/dev/null || true
 	git -C "$KSU_DIR" clean -fd 2>/dev/null || true
-	git -C "$KSU_DIR" checkout --detach "$KSU_COMMIT" 2>/dev/null || git -C "$KSU_DIR" checkout "$KSU_COMMIT"
+	git -C "$KSU_DIR" checkout "$KSU_COMMIT" 2>/dev/null || git -C "$KSU_DIR" checkout --detach "$KSU_COMMIT" 2>/dev/null || git -C "$KSU_DIR" checkout -B "$KSU_COMMIT" "origin/$KSU_COMMIT" 2>/dev/null || true
 
 	if [[ -s "$KSU_PATCH" ]]; then
 		git -C "$KSU_DIR" apply "$KSU_PATCH" 2>/dev/null || true
