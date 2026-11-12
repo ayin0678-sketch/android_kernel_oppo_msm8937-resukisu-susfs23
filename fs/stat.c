@@ -14,16 +14,25 @@
 #include <linux/security.h>
 #include <linux/syscalls.h>
 #include <linux/pagemap.h>
-#if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MOUNT)
+#if defined(CONFIG_KSU_SUSFS) || defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MOUNT)
 #include <linux/susfs_def.h>
+#include <linux/jump_label.h>
 #endif
 
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
 
-#ifdef CONFIG_KSU
-extern int ksu_handle_stat(int *dfd, const char __user **filename_user,
-			  int *flags);
+#ifdef CONFIG_KSU_SUSFS
+extern struct filename *getname_flags(const char __user *filename, int flags, int *empty);
+extern struct static_key_true ksu_is_init_rc_hook_enabled;
+extern void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr);
+extern struct static_key_true ksu_su_compat_enabled;
+extern bool __ksu_is_allow_uid_for_current(uid_t uid);
+extern int ksu_handle_stat(int *dfd, struct filename **filename, int *flags);
+#endif
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+extern bool susfs_is_inode_sus_kstat(struct inode *inode, bool *out_is_fuse);
+extern void susfs_sus_kstat_spoof_generic_fillattr(struct inode *inode, struct kstat *stat, u32 result_mask);
 #endif
 
 
@@ -36,11 +45,6 @@ extern int ksu_handle_stat(int *dfd, const char __user **filename_user,
  * found on the VFS inode structure.  This is the default if no getattr inode
  * operation is supplied.
  */
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-extern void susfs_generic_fillattr_spoofer(
-	struct inode *inode, struct kstat *stat);
-#endif
-
 void generic_fillattr(struct inode *inode, struct kstat *stat)
 {
 	stat->dev = inode->i_sb->s_dev;
@@ -56,9 +60,6 @@ void generic_fillattr(struct inode *inode, struct kstat *stat)
 	stat->ctime = inode->i_ctime;
 	stat->blksize = i_blocksize(inode);
 	stat->blocks = inode->i_blocks;
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-	susfs_generic_fillattr_spoofer(inode, stat);
-#endif
 
 	if (IS_NOATIME(inode))
 		stat->result_mask &= ~STATX_ATIME;
@@ -89,10 +90,50 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 	stat->result_mask |= STATX_BASIC_STATS;
 	request_mask &= STATX_ALL;
 	query_flags &= KSTAT_QUERY_FLAGS;
-	if (inode->i_op->getattr)
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	if (susfs_is_current_app_uid()) {
+		bool is_fuse = false;
+
+		if (susfs_is_inode_sus_kstat(inode, &is_fuse)) {
+			if (is_fuse)
+				stat->result_mask |= STATX_SUS_KSTAT_FUSE;
+			else
+				stat->result_mask |= STATX_SUS_KSTAT;
+		}
+	}
+#endif
+	if (inode->i_op->getattr) {
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+		int err = inode->i_op->getattr(path, stat, request_mask, query_flags);
+
+		if (!err) {
+			if (stat->result_mask & STATX_SUS_KSTAT) {
+				susfs_sus_kstat_spoof_generic_fillattr(inode, stat, STATX_SUS_KSTAT);
+				return err;
+			}
+			if (stat->result_mask & STATX_SUS_KSTAT_FUSE) {
+				susfs_sus_kstat_spoof_generic_fillattr(inode, stat, STATX_SUS_KSTAT_FUSE);
+				return err;
+			}
+		}
+		return err;
+#else
 		return inode->i_op->getattr(path, stat, request_mask,
 					    query_flags);
-
+#endif
+	}
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	if (stat->result_mask & STATX_SUS_KSTAT) {
+		generic_fillattr(inode, stat);
+		susfs_sus_kstat_spoof_generic_fillattr(inode, stat, STATX_SUS_KSTAT);
+		return 0;
+	}
+	if (stat->result_mask & STATX_SUS_KSTAT_FUSE) {
+		generic_fillattr(inode, stat);
+		susfs_sus_kstat_spoof_generic_fillattr(inode, stat, STATX_SUS_KSTAT_FUSE);
+		return 0;
+	}
+#endif
 	generic_fillattr(inode, stat);
 	return 0;
 }
@@ -152,6 +193,10 @@ int vfs_statx_fd(unsigned int fd, struct kstat *stat,
 	if (f.file) {
 		error = vfs_getattr(&f.file->f_path, stat,
 				    request_mask, query_flags);
+#ifdef CONFIG_KSU_SUSFS
+		if (static_branch_unlikely(&ksu_is_init_rc_hook_enabled))
+			ksu_handle_vfs_fstat(fd, &stat->size);
+#endif
 		fdput(f);
 	}
 	return error;
@@ -183,10 +228,6 @@ int vfs_statx(int dfd, const char __user *filename, int flags,
 	int error = -EINVAL;
 	unsigned int lookup_flags = LOOKUP_FOLLOW | LOOKUP_AUTOMOUNT;
 
-#ifdef CONFIG_KSU
-	ksu_handle_stat(&dfd, &filename, &flags);
-#endif
-
 	if ((flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT |
 		       AT_EMPTY_PATH | KSTAT_QUERY_FLAGS)) != 0)
 		return -EINVAL;
@@ -199,11 +240,31 @@ int vfs_statx(int dfd, const char __user *filename, int flags,
 		lookup_flags |= LOOKUP_EMPTY;
 
 retry:
+#ifdef CONFIG_KSU_SUSFS
+	{
+		struct filename *fname = getname_flags(filename, lookup_flags, NULL);
+
+		if (likely(susfs_is_current_proc_no_su()))
+			goto stat_orig_flow;
+
+		if (static_branch_likely(&ksu_su_compat_enabled)) {
+			if (unlikely(__ksu_is_allow_uid_for_current(current_uid().val)))
+				ksu_handle_stat(&dfd, &fname, &flags);
+		}
+stat_orig_flow:
+		/* filename_lookup() drops the filename reference. */
+		error = filename_lookup(dfd, fname, lookup_flags, &path, NULL);
+	}
+#else
 	error = user_path_at(dfd, filename, lookup_flags, &path);
+#endif
 	if (error)
 		goto out;
 
 	error = vfs_getattr(&path, stat, request_mask, flags);
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+	stat->result_mask &= ~(STATX_SUS_KSTAT | STATX_SUS_KSTAT_FUSE);
+#endif
 	path_put(&path);
 	if (retry_estale(error, lookup_flags)) {
 		lookup_flags |= LOOKUP_REVAL;

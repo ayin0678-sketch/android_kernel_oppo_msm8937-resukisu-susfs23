@@ -2,13 +2,13 @@
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUT="${OUT:-$ROOT/out/a57-resukisu-susfs}"
+OUT="${OUT:-$ROOT/out/a57-bakasu-susfs}"
 DEFCONFIG="${DEFCONFIG:-lineageos_A57_defconfig}"
 JOBS="${JOBS:-$(nproc)}"
-KSU_COMMIT="${KSU_COMMIT:-85fd9faafb76143f6ff50b651fb852d06fd765b1}"
-KSU_URL="https://github.com/ayin0678-sketch/ReSukiSU-A57-SUSFS21.git"
-KSU_DIR="$ROOT/KernelSU-ReSukiSU"
-KSU_PATCH="$ROOT/patches/resukisu-a57-compat.patch"
+KSU_COMMIT="${KSU_COMMIT:-main}"
+KSU_URL="https://github.com/Baka-SU/BakaSU.git"
+KSU_DIR="$ROOT/BakaSU"
+KSU_PATCH="$ROOT/patches/bakasu-susfs24.patch"
 LOG="$OUT/build.log"
 
 die() {
@@ -17,28 +17,35 @@ die() {
 }
 
 prepare_ksu() {
-	echo "Preparing ReSukiSU source..."
+	echo "Preparing BakaSU source..."
 	if [[ ! -d "$KSU_DIR/.git" ]] && [[ ! -f "$KSU_DIR/.git" ]]; then
 		rm -rf "$KSU_DIR"
-		echo "Cloning ReSukiSU from $KSU_URL..."
+		echo "Cloning BakaSU from $KSU_URL..."
 		git clone "$KSU_URL" "$KSU_DIR"
 	else
 		git -C "$KSU_DIR" remote set-url origin "$KSU_URL" 2>/dev/null || true
-		git -C "$KSU_DIR" fetch origin --tags 2>/dev/null || true
 	fi
 
-	git -C "$KSU_DIR" reset --hard 2>/dev/null || true
-	git -C "$KSU_DIR" clean -fd 2>/dev/null || true
-	git -C "$KSU_DIR" checkout --detach "$KSU_COMMIT" 2>/dev/null || git -C "$KSU_DIR" checkout "$KSU_COMMIT"
+	git -C "$KSU_DIR" fetch origin --tags
+	git -C "$KSU_DIR" reset --hard
+	git -C "$KSU_DIR" clean -fd
+	if [[ "$KSU_COMMIT" == "main" ]]; then
+		git -C "$KSU_DIR" checkout --detach origin/main
+	else
+		git -C "$KSU_DIR" checkout --detach "$KSU_COMMIT"
+	fi
 
 	if [[ -s "$KSU_PATCH" ]]; then
-		git -C "$KSU_DIR" apply "$KSU_PATCH" 2>/dev/null || true
+		git -C "$KSU_DIR" apply --check "$KSU_PATCH"
+		git -C "$KSU_DIR" apply "$KSU_PATCH"
+	else
+		die "missing BakaSU SUSFS 2.4 patch: $KSU_PATCH"
 	fi
 
 	rm -rf "$ROOT/drivers/kernelsu"
-	ln -s ../KernelSU-ReSukiSU/kernel "$ROOT/drivers/kernelsu"
+	ln -s ../BakaSU/kernel "$ROOT/drivers/kernelsu"
 
-	echo "ReSukiSU source: $(git -C "$KSU_DIR" rev-parse HEAD)"
+	echo "BakaSU source: $(git -C "$KSU_DIR" rev-parse HEAD)"
 }
 
 find_clang_bin() {
@@ -170,7 +177,7 @@ IMAGE="$OUT/arch/arm64/boot/Image.gz-dtb"
 
 cp -f "$IMAGE" "$ROOT/AnyKernel3/Image.gz-dtb"
 if command -v zip >/dev/null 2>&1; then
-	PACKAGE="$OUT/ReSukiSU-SUSFS-v2.1.0-OPPO-A57.zip"
+	PACKAGE="$OUT/BakaSU-SUSFS-v2.4.0-OPPO-A57.zip"
 	(
 		cd "$ROOT/AnyKernel3"
 		zip -qr9 "$PACKAGE" . -x '.git/*' 'README.md'

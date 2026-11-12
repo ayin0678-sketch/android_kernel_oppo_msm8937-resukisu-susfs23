@@ -1,4 +1,4 @@
-name: Build OPPO A57 Kernel (ReSukiSU + SUSFS Tested)
+name: Build OPPO A57 Kernel (BakaSU main + SUSFS 2.4)
 
 on:
   push:
@@ -10,13 +10,13 @@ on:
   workflow_dispatch:
     inputs:
       resukisu_commit:
-        description: 'ReSukiSU Git Commit or Tag'
+        description: 'BakaSU git ref (branch, tag, or commit). main tracks upstream.'
         required: false
-        default: '85fd9faafb76143f6ff50b651fb852d06fd765b1'
+        default: 'main'
 
 jobs:
   build:
-    name: Build A57 Kernel (Proton Clang)
+    name: Build A57 Kernel (BakaSU + Proton Clang)
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout Kernel Source
@@ -64,7 +64,7 @@ jobs:
       - name: Upload AnyKernel3 Flashable ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: ReSukiSU-SUSFS-OPPO-A57-tested
+          name: BakaSU-SUSFS-v2.4.0-OPPO-A57
           path: out/*.zip
 
       - name: Upload Kernel Image

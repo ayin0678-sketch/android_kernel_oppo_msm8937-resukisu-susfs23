@@ -351,7 +351,7 @@ static void show_vma_header_prefix(struct seq_file *m,
 }
 
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-extern void susfs_show_map_vma_spoofer(struct inode *inode, dev_t *out_dev, unsigned long *out_ino);
+extern void susfs_sus_kstat_spoof_show_map_vma(struct inode *inode, dev_t *out_dev, unsigned long *out_ino);
 #endif
 
 static void
@@ -371,7 +371,7 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma, int is_pid)
 		struct inode *inode = file_inode(vma->vm_file);
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 		if (unlikely(test_bit(AS_FLAGS_SUS_KSTAT, &inode->i_mapping->flags))) {
-			susfs_show_map_vma_spoofer(inode, &dev, &ino);
+			susfs_sus_kstat_spoof_show_map_vma(inode, &dev, &ino);
 			goto bypass_orig_flow;
 		}
 #endif

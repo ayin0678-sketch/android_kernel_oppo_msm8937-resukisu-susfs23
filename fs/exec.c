@@ -62,11 +62,24 @@
 #include <asm/mmu_context.h>
 #include <asm/tlb.h>
 
-#ifdef CONFIG_KSU
-extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr,
-			       void *argv, void *envp, int *flags);
-extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
-				       void *argv, void *envp, int *flags);
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs_def.h>
+#include <linux/jump_label.h>
+extern struct static_key_true ksu_su_compat_enabled;
+extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;
+extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
+			void *envp, int *flags);
+extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr, void *argv,
+				void *envp, int *flags);
+extern int ksu_handle_post_execveat_sucompat(int *fd, struct filename **filename_ptr, void *argv,
+				void *envp, int *flags, int *retval);
+#ifndef KSU_NO_PREINIT
+struct user_arg_ptr;
+extern int ksu_setup_preinit_file(struct filename **filename_ptr, struct user_arg_ptr *argv_user);
+extern int ksu_preinit_handle_post_execveat(int *fd, struct filename **filename_ptr,
+				void *argv_user, void *envp_user,
+				int *flags, int *retval, int *preinit_fd);
+#endif
 #endif
 
 #include <trace/events/task.h>
@@ -1693,9 +1706,39 @@ static int do_execveat_common(int fd, struct filename *filename,
 	struct file *file;
 	struct files_struct *displaced;
 	int retval;
+#ifdef CONFIG_KSU_SUSFS
+	bool is_su_session = false;
+#ifndef KSU_NO_PREINIT
+	bool is_ksu_preinit_session = false;
+	int preinit_fd = 0;
+#endif
+#endif
 
 	if (IS_ERR(filename))
 		return PTR_ERR(filename);
+
+#ifdef CONFIG_KSU_SUSFS
+	if (likely(susfs_is_current_proc_no_su()))
+		goto orig_flow;
+
+	if (static_branch_likely(&ksu_su_compat_enabled)) {
+		if (static_branch_unlikely(&susfs_is_sdcard_android_data_not_decrypted))
+			is_su_session = !ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
+		else
+			is_su_session = !ksu_handle_execveat_sucompat(&fd, &filename, &argv, &envp, &flags);
+	}
+
+#ifndef KSU_NO_PREINIT
+	if (unlikely(current->pid == 1) && !is_su_session) {
+		if (fd == AT_FDCWD || !(flags & AT_EMPTY_PATH)) {
+			preinit_fd = ksu_setup_preinit_file(&filename, &argv);
+			if (preinit_fd > 0)
+				is_ksu_preinit_session = true;
+		}
+	}
+#endif
+orig_flow:
+#endif
 
 	/*
 	 * We move the actual failure in case of RLIMIT_NPROC excess from
@@ -1807,6 +1850,31 @@ static int do_execveat_common(int fd, struct filename *filename,
 	}
 
 	retval = exec_binprm(bprm);
+#ifdef CONFIG_KSU_SUSFS
+	if (unlikely(is_su_session))
+		(void)ksu_handle_post_execveat_sucompat(&fd, &filename, &argv, &envp, &flags, &retval);
+#ifndef KSU_NO_PREINIT
+	if (unlikely(is_ksu_preinit_session) &&
+	    ksu_preinit_handle_post_execveat(&fd, &filename, &argv, &envp,
+					     &flags, &retval, &preinit_fd)) {
+		if (bprm->mm) {
+			acct_arg_size(bprm, 0);
+			mmput(bprm->mm);
+		}
+		current->fs->in_exec = 0;
+		current->in_execve = 0;
+		free_bprm(bprm);
+		kfree(pathbuf);
+		if (displaced)
+			reset_files_struct(displaced);
+		bprm = NULL;
+		pathbuf = NULL;
+		displaced = NULL;
+		is_ksu_preinit_session = false;
+		goto orig_flow;
+	}
+#endif
+#endif
 	if (retval < 0)
 		goto out;
 
@@ -1850,10 +1918,6 @@ int do_execve(struct filename *filename,
 {
 	struct user_arg_ptr argv = { .ptr.native = __argv };
 	struct user_arg_ptr envp = { .ptr.native = __envp };
-#ifdef CONFIG_KSU
-		ksu_handle_execveat((int *)AT_FDCWD, &filename, &argv, &envp, 0);
-		ksu_handle_execveat_sucompat((int *)AT_FDCWD, &filename, &argv, &envp, 0);
-#endif
 	return do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
 }
 
@@ -1881,10 +1945,6 @@ static int compat_do_execve(struct filename *filename,
 		.is_compat = true,
 		.ptr.compat = __envp,
 	};
-#ifdef CONFIG_KSU
-		ksu_handle_execveat((int *)AT_FDCWD, &filename, &argv, &envp, 0);
-		ksu_handle_execveat_sucompat((int *)AT_FDCWD, &filename, &argv, &envp, 0);
-#endif
 	return do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
 }
 

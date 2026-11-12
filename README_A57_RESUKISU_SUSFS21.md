@@ -1,4 +1,4 @@
-# OPPO A57 ReSukiSU + SUSFS 2.1.0
+# OPPO A57 BakaSU + SUSFS 2.4.0
 
 ## Target
 
@@ -6,47 +6,35 @@
 - SoC: Qualcomm MSM8940 / MSM8937
 - Kernel: Linux 4.9.337
 - ROM target: LineageOS 21
-- Root implementation: ReSukiSU
-- SUSFS version: 2.1.0
+- Root implementation: [BakaSU](https://github.com/Baka-SU/BakaSU) branch `main`
+- SUSFS version: v2.4.0 NON-GKI
+- Hook mode: `CONFIG_KSU_SUSFS` (SUSFS inline hook)
 
-## Validation
+## What changed from the 2.1 snapshot
 
-This source snapshot has passed:
+The kernel build clones BakaSU `main` and applies `patches/bakasu-susfs24.patch`
+so the priority-uid filter command is available. SUSFS v2.4.0 is wired through
+the existing 4.9 call sites. The sdcard fsnotify watch keeps the 4.9
+`handle_event` API, and the mount-id sentinel used by `fs/namespace.c` is kept.
 
-- kernel compilation;
-- final vmlinux linking;
-- Image.gz-dtb generation;
-- AnyKernel3 ZIP packaging;
-- TWRP installation;
-- Android boot;
-- manager recognition.
-
-Boot and manager recognition are confirmed. Individual SUSFS
-features have not all been exhaustively tested.
-
-## ReSukiSU
-
-Repository:
-
-`https://github.com/ayin0678-sketch/ReSukiSU-A57-SUSFS21.git`
-
-Pinned commit:
-
-`85fd9faafb76143f6ff50b651fb852d06fd765b1`
+The previous ReSukiSU + SUSFS 2.1.0 snapshot of this branch booted and was
+recognized by the manager. This 2.4 update still has to be confirmed by the
+GitHub Action build and a device flash.
 
 ## Build
 
 ```bash
 CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-OUT="$PWD/out/a57-resukisu-susfs21-full" \
+OUT="$PWD/out/a57-bakasu-susfs" \
 JOBS=4 \
 ./build_a57_resukisu_susfs.sh
 ```
 
+`KSU_COMMIT` overrides the BakaSU ref. The default is `main`.
+
 ## Clone
 
 ```bash
-git clone --recurse-submodules \
-    -b lineage-21-resukisu-susfs21 \
-    https://github.com/ayin0678-sketch/android_kernel_oppo_msm8937-resukisu-susfs21.git
+git clone -b lineage-21-resukisu-susfs23 \
+    https://github.com/ayin0678-sketch/android_kernel_oppo_msm8937-resukisu-susfs23.git
 ```

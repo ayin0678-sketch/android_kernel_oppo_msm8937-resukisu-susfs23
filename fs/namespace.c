@@ -3863,4 +3863,51 @@ bool susfs_is_mnt_devname_ksu(struct path *path) {
 	}
 	return false;
 }
+
+int susfs_get_non_sus_mnt_id_from_mnt(struct mount *orig_mnt)
+{
+	struct mount *mnt = orig_mnt;
+	int mnt_id;
+
+	if (!mnt)
+		return 0;
+	if (mnt->mnt_id < DEFAULT_KSU_MNT_ID)
+		return mnt->mnt_id;
+
+	lock_mount_hash();
+	for (; mnt && mnt->mnt_parent && mnt != mnt->mnt_parent &&
+	     mnt->mnt_id >= DEFAULT_KSU_MNT_ID; mnt = mnt->mnt_parent)
+		;
+	mnt_id = mnt->mnt_id;
+	unlock_mount_hash();
+	return mnt_id;
+}
+
+struct vfsmount *susfs_get_non_sus_vfsmnt_from_vfsmnt(struct vfsmount *vfsmnt)
+{
+	struct mount *mnt;
+
+	if (!vfsmnt)
+		return NULL;
+	mnt = real_mount(vfsmnt);
+	if (mnt->mnt_id < DEFAULT_KSU_MNT_ID) {
+		mntget(&mnt->mnt);
+		dget(mnt->mnt.mnt_root);
+		return &mnt->mnt;
+	}
+
+	lock_mount_hash();
+	for (; mnt && mnt->mnt_parent && mnt != mnt->mnt_parent &&
+	     mnt->mnt_id >= DEFAULT_KSU_MNT_ID; mnt = mnt->mnt_parent)
+		;
+	mntget(&mnt->mnt);
+	if (!mnt->mnt.mnt_root) {
+		mntput(&mnt->mnt);
+		unlock_mount_hash();
+		return vfsmnt;
+	}
+	dget(mnt->mnt.mnt_root);
+	unlock_mount_hash();
+	return &mnt->mnt;
+}
 #endif

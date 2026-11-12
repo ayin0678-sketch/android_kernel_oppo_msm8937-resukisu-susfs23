@@ -36,7 +36,9 @@
 
 
 #ifdef CONFIG_KSU_SUSFS
-bool susfs_is_avc_log_spoofing_enabled = false;
+#include <linux/jump_label.h>
+extern struct static_key_false susfs_is_avc_log_spoofing_enabled;
+extern u32 susfs_ksu_sid;
 #endif
 #define AVC_CACHE_SLOTS			512
 #define AVC_DEF_CACHE_THRESHOLD		512
@@ -162,6 +164,14 @@ static void avc_dump_query(struct audit_buffer *ab, u32 ssid, u32 tsid, u16 tcla
 	}
 
 	rc = security_sid_to_context(tsid, &scontext, &scontext_len);
+#ifdef CONFIG_KSU_SUSFS
+	if (static_branch_unlikely(&susfs_is_avc_log_spoofing_enabled) &&
+	    susfs_ksu_sid && tsid == susfs_ksu_sid) {
+		audit_log_format(ab, " tcontext=u:r:priv_app:s0:c512,c768");
+		if (!rc)
+			kfree(scontext);
+	} else
+#endif
 	if (rc)
 		audit_log_format(ab, " tsid=%d", tsid);
 	else {

@@ -1,0 +1,65 @@
+diff --git a/kernel/Kconfig b/kernel/Kconfig
+--- a/kernel/Kconfig
++++ b/kernel/Kconfig
+@@ -244,6 +244,14 @@
+         - It may not be able to evade detections by apps that implement a good injection detection.
+         - Effective only on zygote spawned umounted user app process >= 10000.
+ 
++config KSU_SUSFS_PRIORITY_UID_FILTER
++    bool "Enable to allow adding user-defined uids that will be hidden from getpriority/setpriority/ioprio_get/ioprio_set syscall"
++    depends on KSU_SUSFS
++    default y
++    help
++        - Allow hiding user-defined uids from syscalls like getpriority/setpriority/ioprio_get/ioprio_set.
++        - Effective on all processes with uid >= 10000.
++
+ endmenu
+ 
+ endmenu
+diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
+--- a/kernel/supercall/dispatch.c
++++ b/kernel/supercall/dispatch.c
+@@ -1168,6 +1168,12 @@
+         return 0;
+     }
+ #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
++#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
++    case CMD_SUSFS_SET_PRIORITY_UID_FILTER: {
++        susfs_set_priority_uid_filter(arg);
++        return 0;
++    }
++#endif // #ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
+     case CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING: {
+         susfs_set_avc_log_spoofing(arg);
+         return 0;
+diff --git a/kernel/manager/pkg_observer.c b/kernel/manager/pkg_observer.c
+--- a/kernel/manager/pkg_observer.c
++++ b/kernel/manager/pkg_observer.c
+@@ -8,6 +8,7 @@
+ #include <linux/rculist.h>
+ #include <linux/task_work.h>
+ #include <linux/version.h>
++#include <linux/susfs.h>
+ #include "klog.h" // IWYU pragma: keep
+ #include "manager/throne_tracker.h"
+ 
+@@ -30,6 +31,9 @@
+     if (current->flags & PF_EXITING)
+         return;
+     track_throne(TRACK_THRONE_FORCE_SYNCHRONOUS);
++#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
++    susfs_parse_priority_app_strings();
++#endif
+ }
+ 
+ // Never scan from the fsnotify handler: fsnotify_mark_srcu and the rename's dir
+@@ -52,6 +56,9 @@
+     }
+     pr_warn("defer track_throne failed, run it inline\n");
+     track_throne(TRACK_THRONE_FORCE_SYNCHRONOUS);
++#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
++    susfs_parse_priority_app_strings();
++#endif
+ }
+ 
+ static int ksu_handle_inode_event(struct fsnotify_mark *mark, u32 mask, struct inode *inode, struct inode *dir,

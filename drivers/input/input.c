@@ -436,6 +436,10 @@ static void input_handle_event(struct input_dev *dev,
  * to 'seed' initial state of a switch or initial position of absolute
  * axis, etc.
  */
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/jump_label.h>
+extern struct static_key_true ksu_is_input_hook_enabled;
+#endif
 #ifdef CONFIG_KSU
 extern int ksu_handle_input_handle_event(unsigned int *type,
         unsigned int *code, int *value);
@@ -447,6 +451,9 @@ void input_event(struct input_dev *dev,
 	unsigned long flags;
 
 #ifdef CONFIG_KSU
+#ifdef CONFIG_KSU_SUSFS
+	if (static_branch_unlikely(&ksu_is_input_hook_enabled))
+#endif
 	ksu_handle_input_handle_event(&type, &code, &value);
 #endif
 

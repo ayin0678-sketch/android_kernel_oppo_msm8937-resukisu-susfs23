@@ -1,4 +1,4 @@
-[submodule "KernelSU-ReSukiSU"]
-	path = KernelSU-ReSukiSU
-	url = https://github.com/ayin0678-sketch/ReSukiSU-A57-SUSFS21.git
-	branch = a57-susfs21
+[submodule "BakaSU"]
+	path = BakaSU
+	url = https://github.com/Baka-SU/BakaSU.git
+	branch = main
